@@ -1,7 +1,9 @@
 // Original No Ponto artwork. AppKit vector drawing, no downloaded assets.
 // Usage: swift scripts/make_icon.swift [NoPonto/Assets.xcassets]
 import AppKit
+import CoreGraphics
 import Foundation
+import ImageIO
 
 func color(_ hex: UInt32, alpha: CGFloat = 1) -> NSColor {
     NSColor(srgbRed: CGFloat((hex >> 16) & 255) / 255,
@@ -74,13 +76,16 @@ func artwork() {
 }
 
 func render(size: Int, destination: URL) throws {
-    // No alpha channel: App Store and Home Screen icon assets must be opaque.
-    guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
-        bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
-        colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
-        let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
-        throw NSError(domain: "NoPontoIcon", code: 1)
+    // Quartz draws RGB into 32-bit RGBX storage; packed 24-bit RGB is not a
+    // supported drawing context. The skipped byte is padding, NOT alpha.
+    guard let quartz = CGContext(data: nil, width: size, height: size,
+        bitsPerComponent: 8, bytesPerRow: size * 4,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
+        throw NSError(domain: "NoPontoIcon", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Cannot create opaque RGBX drawing context"])
     }
+    let context = NSGraphicsContext(cgContext: quartz, flipped: false)
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = context
     context.imageInterpolation = .high
@@ -91,10 +96,16 @@ func render(size: Int, destination: URL) throws {
     artwork()
     context.flushGraphics()
     NSGraphicsContext.restoreGraphicsState()
-    guard let data = bitmap.representation(using: .png, properties: [:]) else {
-        throw NSError(domain: "NoPontoIcon", code: 2)
+    guard let rendered = quartz.makeImage(),
+        let output = CGImageDestinationCreateWithURL(destination as CFURL, "public.png" as CFString, 1, nil) else {
+        throw NSError(domain: "NoPontoIcon", code: 2,
+            userInfo: [NSLocalizedDescriptionKey: "Cannot prepare PNG destination"])
     }
-    try data.write(to: destination)
+    CGImageDestinationAddImage(output, rendered, nil)
+    guard CGImageDestinationFinalize(output) else {
+        throw NSError(domain: "NoPontoIcon", code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "Cannot write opaque PNG"])
+    }
 }
 
 let directory = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "NoPonto/Assets.xcassets", isDirectory: true)
