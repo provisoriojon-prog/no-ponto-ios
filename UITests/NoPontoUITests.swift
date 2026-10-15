@@ -14,6 +14,14 @@ final class NoPontoUITests: XCTestCase {
         waitForCatalog()
     }
 
+    override func tearDownWithError() throws {
+        if let run = testRun, run.totalFailureCount > 0, app != nil {
+            capture("falha-estado-final")
+            recordHierarchy("falha-hierarquia-final")
+        }
+        try super.tearDownWithError()
+    }
+
     func testMinimalSearchSavedRoutesAndPersistence() throws {
         XCTAssertEqual(savedRoutes.count, 0)
         XCTAssertFalse(app.buttons["line-detail-button"].exists)
@@ -38,8 +46,7 @@ final class NoPontoUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [threeSuggestions], timeout: 10), .completed)
         capture("03-sugestoes-397")
         routeSuggestion("397").tap()
-        waitUntilGone(search)
-        XCTAssertTrue(savedRoute("397").waitForExistence(timeout: 10))
+        verifyReturnedToMap(saved: "397")
         XCTAssertFalse(app.buttons["choose-pattern-button"].exists, "Adicionar linha fecha a busca, sem abrir detalhe")
         XCTAssertFalse(app.buttons["line-detail-button"].exists, "Não há painel permanente após adicionar linha")
 
@@ -100,7 +107,7 @@ final class NoPontoUITests: XCTestCase {
         app.buttons["Fechar"].firstMatch.tap()
         app.buttons["saved-routes-menu"].tap()
         app.buttons["Remover todas"].firstMatch.tap()
-        waitUntilGone(savedRoute("397"))
+        verifyReturnedToMap()
         XCTAssertEqual(savedRoutes.count, 0)
         XCTAssertFalse(app.buttons["line-detail-button"].exists)
         capture("07-mapa-limpo-apos-remover")
@@ -128,7 +135,8 @@ final class NoPontoUITests: XCTestCase {
         let explanation = app.alerts["Localização"]
         XCTAssertTrue(explanation.waitForExistence(timeout: 15))
         explanation.buttons["OK"].tap()
-        waitUntilGone(explanation)
+        verifyReturnedToMap()
+        XCTAssertFalse(explanation.exists)
         XCTAssertFalse(app.staticTexts["location-message"].exists, "Recusa não deixa painel cobrindo o mapa")
         XCTAssertEqual(savedRoutes.count, 0)
         openSearch()
@@ -157,13 +165,21 @@ final class NoPontoUITests: XCTestCase {
         let suggestion = routeSuggestion(number)
         XCTAssertTrue(suggestion.waitForExistence(timeout: 15))
         suggestion.tap()
-        waitUntilGone(field)
-        XCTAssertTrue(savedRoute(number).waitForExistence(timeout: 10))
+        verifyReturnedToMap(saved: number)
     }
 
-    private func waitUntilGone(_ element: XCUIElement) {
-        let absent = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !element.exists }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [absent], timeout: 15), .completed)
+    private func verifyReturnedToMap(saved number: String? = nil) {
+        // Positive controls prove that the sheet is closed and the map is interactive.
+        // Querying a dismantled TextField repeatedly can stall AX snapshots during MapKit rendering.
+        if let number {
+            let chip = savedRoute(number)
+            XCTAssertTrue(chip.waitForExistence(timeout: 30), "A linha escolhida deve estar salva no mapa")
+            XCTAssertTrue(chip.isHittable, "A linha salva deve estar tocável, sem a busca por cima")
+        }
+        let search = app.buttons["search-button"]
+        XCTAssertTrue(search.waitForExistence(timeout: 30))
+        XCTAssertTrue(search.isHittable, "O mapa deve estar novamente interagível")
+        XCTAssertFalse(app.textFields["route-search-field"].exists, "A busca deve ter fechado após a seleção")
     }
 
     private func openContextDetails() {
@@ -171,11 +187,7 @@ final class NoPontoUITests: XCTestCase {
         let exists = button.waitForExistence(timeout: 10)
         capture("contexto-apos-toque-na-linha")
         if !exists {
-            let tree = XCTAttachment(string: app.debugDescription)
-            tree.name = "contexto-hierarquia-acessibilidade"
-            tree.lifetime = .keepAlways
-            add(tree)
-            print("CONTEXT_ACCESSIBILITY_DIAGNOSTIC\n\(app.debugDescription)")
+            recordHierarchy("contexto-hierarquia-acessibilidade")
         }
         XCTAssertTrue(exists, "O toque na linha deve revelar o cartão contextual acessível")
         XCTAssertTrue(button.isHittable, "O cartão contextual deve ser tocável")
@@ -194,5 +206,14 @@ final class NoPontoUITests: XCTestCase {
         screenshot.name = name
         screenshot.lifetime = .keepAlways
         add(screenshot)
+    }
+
+    private func recordHierarchy(_ name: String) {
+        let description = app.debugDescription
+        let tree = XCTAttachment(string: description)
+        tree.name = name
+        tree.lifetime = .keepAlways
+        add(tree)
+        print("ACCESSIBILITY_DIAGNOSTIC \(name)\n\(description)")
     }
 }

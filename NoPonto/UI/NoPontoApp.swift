@@ -39,6 +39,7 @@ struct TransitHomeView: View {
     @State private var locationAlert: String?
     @State private var inspectedStop: TransitStop?
     @State private var showsContext = false
+    @State private var pendingRouteID: String?
 
     private var displayedPatterns: [TransitPattern] {
         var patterns: [TransitPattern] = []
@@ -92,7 +93,7 @@ struct TransitHomeView: View {
                     .accessibilityIdentifier("demo-banner")
             }
         }
-        .sheet(item: $sheet) { destination in
+        .sheet(item: $sheet, onDismiss: finishPendingRouteSelection) { destination in
             NavigationStack {
                 sheetContent(destination)
                     .toolbar { ToolbarItem(placement: .topBarTrailing) { CloseSheetButton { sheet = nil } } }
@@ -242,7 +243,9 @@ struct TransitHomeView: View {
     @ViewBuilder private func sheetContent(_ destination: TransitSheet) -> some View {
         switch destination {
         case .search: RouteSearchView { routeID in
-            store.selectRoute(routeID)
+            // Dismiss the keyboard/sheet before changing MapKit geometry and annotations.
+            // onDismiss commits the selected line, so the transition has one clear end state.
+            pendingRouteID = routeID
             followsHeading = false
             showsContext = false
             inspectedStop = nil
@@ -291,6 +294,12 @@ struct TransitHomeView: View {
         followsHeading = false
         inspectedStop = nil
         showsContext = true
+    }
+
+    private func finishPendingRouteSelection() {
+        guard let routeID = pendingRouteID else { return }
+        pendingRouteID = nil
+        store.selectRoute(routeID)
     }
 
     private func inspectStop(_ stopID: String) {

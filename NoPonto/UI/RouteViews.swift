@@ -39,7 +39,7 @@ struct RouteSearchView: View {
                 Spacer()
             } else {
                 List(results) { route in
-                    Button { onSelect(route.id) } label: { RouteSearchRow(route: route) }
+                    Button { searchFocused = false; onSelect(route.id) } label: { RouteSearchRow(route: route) }
                         .buttonStyle(.plain).accessibilityIdentifier("route-row-\(route.id)")
                         .accessibilityLabel("\(route.isBRT ? "BRT" : "Linha") \(route.shortName), \(route.longName)")
                 }.listStyle(.plain)
