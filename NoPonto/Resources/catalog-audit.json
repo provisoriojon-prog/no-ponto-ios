@@ -1,0 +1,60 @@
+{
+  "sourceURL": "https://dados.mobilidade.rio/gtfs/schedule",
+  "attribution": "Dados: Secretaria Municipal de Transportes do Rio de Janeiro (SMTR), CC BY 4.0.",
+  "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
+  "sourceSHA256": "a99f925460e7628b6eeecb9952430542c06b3e2800afa8ba7f9765fd2e6f26f1",
+  "distanceMethod": "Haversine R=6371000m on encoded precision-5 geometry; validated GTFS distances interpolate into that domain; otherwise monotonic projection.",
+  "warnings": [],
+  "patternsNeedingReview": [],
+  "counts": {
+    "routes": 494,
+    "busRoutes": 459,
+    "brtRoutes": 35,
+    "stops": 7694,
+    "shapes": 961,
+    "trips": 17361,
+    "mappedTrips": 17361,
+    "patterns": 971,
+    "stopTimeRows": 1031419,
+    "stopVisits": 54785,
+    "patternsWithRepeatedStops": 48,
+    "routesWithoutPatterns": 0,
+    "patternsNeedingReview": 0,
+    "unreliableStopVisits": 0
+  },
+  "projectionMethods": {
+    "gtfs-calibrated": 971
+  },
+  "sourceModifiedBasis": "Latest content date in ZIP directory; not the date of download.",
+  "unmappedTripIDs": [],
+  "routeSamples": [
+    {
+      "id": "20000101130",
+      "shortName": "10",
+      "mode": "brt",
+      "patternCount": 2
+    },
+    {
+      "id": "O0369AAA0A",
+      "shortName": "369",
+      "mode": "bus",
+      "patternCount": 2
+    },
+    {
+      "id": "O0397AAA0A",
+      "shortName": "397",
+      "mode": "bus",
+      "patternCount": 2
+    },
+    {
+      "id": "O0397AAR0A",
+      "shortName": "SR397",
+      "mode": "bus",
+      "patternCount": 2
+    }
+  ],
+  "generatedAt": "2026-10-15T21:02:40+00:00",
+  "sourceModified": "2026-06-03",
+  "catalogBytes": 9120337,
+  "catalogSHA256": "22e1ddaacdc889e33339d11d3facc59141a1297866d6a120df93e75fe4926abf"
+}

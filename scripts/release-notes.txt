@@ -1,0 +1,7 @@
+Primeira versão pessoal do No Ponto: mapa, catálogo municipal e BRT do Rio, localização, sentidos, pontos, favoritos e estimativas com indicação de qualidade dos dados. Sem anúncios ou login.
+
+Baixe NoPonto-unsigned.ipa e importe no AltStore Classic para assinar com sua conta Apple. É um app separado do Voa.
+
+Compilação ARM64 para iPhone, testes do núcleo e fluxos no simulador verificados pelo workflow. As capturas do simulador usam veículos fictícios explicitamente marcados; o IPA Release consulta os feeds públicos reais da SMTR. Precisão das chegadas e GPS na rua ainda requerem avaliação no iPhone. Não há alertas em segundo plano nesta versão.
+
+Dados: Prefeitura do Rio/SMTR (GTFS e GTFS-Realtime), sob CC BY 4.0. As previsões são cálculos próprios, não horários oficiais garantidos. Código e ícone originais. Código editável em NoPonto-source.zip.

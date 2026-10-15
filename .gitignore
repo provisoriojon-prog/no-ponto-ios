@@ -1,0 +1,7 @@
+build/
+dist/
+*.xcodeproj/
+*.xcworkspace/
+.DS_Store
+__pycache__/
+NoPonto/Info.plist
