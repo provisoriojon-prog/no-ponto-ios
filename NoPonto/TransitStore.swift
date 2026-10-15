@@ -12,7 +12,8 @@ final class TransitStore: ObservableObject {
         SourceStatus(id: "onibus", name: "Ônibus", lastSuccess: nil, vehicleCount: 0, error: nil),
         SourceStatus(id: "brt", name: "BRT", lastSuccess: nil, vehicleCount: 0, error: nil)
     ]
-    @Published var selectedRouteIDs: Set<String> = []
+    @Published private(set) var selectedRouteIDs: Set<String> = []
+    @Published private var savedRouteIDs: [String] = []
     @Published private(set) var selectedPrimaryRouteID: String?
     @Published var selectedPatternID: String?
     @Published var selectedStopSequence: Int?
@@ -27,6 +28,8 @@ final class TransitStore: ObservableObject {
     private var stopsByID: [String: TransitStop] = [:]
     private var patternsByID: [String: TransitPattern] = [:]
     private var searchIndex: [String: String] = [:]
+    private var routePrefixes: Set<String> = []
+    private var restoredStopID: String?
     private var active = true
     private var started = false
     private var pollingTask: Task<Void, Never>?
@@ -63,9 +66,20 @@ final class TransitStore: ObservableObject {
         if let data = preferences.data(forKey: "favorites.v1"), let saved = try? JSONDecoder().decode([FavoriteJourney].self, from: data) {
             favorites = saved
         }
+        // Route subscriptions are independent of detailed journey favorites. Never migrate favorites silently.
+        if let data = preferences.data(forKey: "savedRoutes.v1"), let saved = try? JSONDecoder().decode(SavedRouteSelection.self, from: data) {
+            var seen: Set<String> = []
+            savedRouteIDs = saved.routeIDs.filter { seen.insert($0).inserted }
+            selectedRouteIDs = Set(savedRouteIDs)
+            selectedPrimaryRouteID = saved.primaryRouteID
+            selectedPatternID = saved.patternID
+            selectedStopSequence = saved.stopSequence
+            restoredStopID = saved.stopID
+        }
     }
 
     var selectedPattern: TransitPattern? { selectedPatternID.flatMap { patternsByID[$0] } }
+    var savedRoutes: [TransitRoute] { savedRouteIDs.compactMap { routesByID[$0] } }
     var selectedRoute: TransitRoute? { selectedPrimaryRouteID.flatMap { routesByID[$0] } }
     var selectedVisits: [StopVisit] { selectedPattern?.stops ?? [] }
     var selectedStop: TransitStop? {
@@ -145,6 +159,7 @@ final class TransitStore: ObservableObject {
     }
 
     private func installCatalog(_ loaded: TransitCatalog) {
+        let previousStopID = selectedStop?.id ?? restoredStopID
         routesByID = Dictionary(uniqueKeysWithValues: loaded.routes.map { ($0.id, $0) })
         stopsByID = Dictionary(uniqueKeysWithValues: loaded.stops.map { ($0.id, $0) })
         patternsByID = Dictionary(uniqueKeysWithValues: loaded.patterns.map { ($0.id, $0) })
@@ -152,11 +167,26 @@ final class TransitStore: ObservableObject {
             let destinations = route.patternIDs.compactMap { patternsByID[$0]?.headsign }.joined(separator: " ")
             return (route.id, Self.normalized(route.shortName + " " + route.longName + " " + destinations))
         })
+        routePrefixes = Set(loaded.routes.map { Self.normalized(String($0.shortName.prefix(while: { $0.isLetter }))) }.filter { !$0.isEmpty })
         engine = TransitEngine(catalog: loaded)
         catalog = loaded
-        selectedRouteIDs = selectedRouteIDs.filter { routesByID[$0] != nil }
-        if let selectedPrimaryRouteID, routesByID[selectedPrimaryRouteID] == nil { clearSelection() }
-        if let selectedPatternID, patternsByID[selectedPatternID] == nil { clearSelection() }
+        savedRouteIDs = savedRouteIDs.filter { routesByID[$0] != nil }
+        selectedRouteIDs = Set(savedRouteIDs)
+        if selectedPrimaryRouteID.map({ !selectedRouteIDs.contains($0) }) ?? true {
+            selectedPrimaryRouteID = savedRouteIDs.first
+        }
+        if selectedPrimaryRouteID == nil {
+            selectedPatternID = nil
+            selectedStopSequence = nil
+        } else if selectedPattern?.routeID != selectedPrimaryRouteID {
+            selectedPatternID = selectedPrimaryRouteID.flatMap { patterns(for: $0).first?.id }
+            selectedStopSequence = nil
+        }
+        if let sequence = selectedStopSequence,
+           !selectedVisits.contains(where: { $0.sequence == sequence && $0.stopID == previousStopID }) {
+            selectedStopSequence = nil
+        }
+        persistRouteSelection()
         recalculateArrivals()
     }
 
@@ -339,11 +369,18 @@ final class TransitStore: ObservableObject {
             return $0.id < $1.id
         }
     }
-    func searchRoutes(_ query: String) -> [TransitRoute] {
+    func searchRoutes(_ query: String, mode: String? = nil) -> [TransitRoute] {
         let q = Self.normalized(query.trimmingCharacters(in: .whitespacesAndNewlines))
+        let digitCount = q.filter(\.isNumber).count
+        if digitCount > 0 {
+            guard digitCount >= 2 else { return [] }
+        } else {
+            guard q.filter(\.isLetter).count >= 2, !routePrefixes.contains(q) else { return [] }
+        }
         let tokens = q.split(separator: " ").map(String.init)
-        return (catalog?.routes ?? []).filter { route in
-            tokens.allSatisfy { (searchIndex[route.id] ?? "").contains($0) }
+        let results = (catalog?.routes ?? []).filter { route in
+            let correctMode = mode == nil || mode == "all" || route.mode == mode
+            return correctMode && tokens.allSatisfy { (searchIndex[route.id] ?? "").contains($0) }
         }.sorted { lhs, rhs in
             let l = Self.normalized(lhs.shortName), r = Self.normalized(rhs.shortName)
             if !q.isEmpty, (l == q) != (r == q) { return l == q }
@@ -351,6 +388,7 @@ final class TransitStore: ObservableObject {
             let order = lhs.shortName.localizedStandardCompare(rhs.shortName)
             return order == .orderedSame ? lhs.id < rhs.id : order == .orderedAscending
         }
+        return Array(results.prefix(8))
     }
     nonisolated static func normalized(_ value: String) -> String {
         value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pt_BR"))
@@ -358,44 +396,65 @@ final class TransitStore: ObservableObject {
 
     func selectRoute(_ id: String) {
         guard routesByID[id] != nil else { statusMessage = "Esta linha ainda não está no catálogo instalado."; return }
-        selectedRouteIDs.insert(id)
+        rememberRoute(id)
         if selectedPrimaryRouteID != id {
             selectedPrimaryRouteID = id
             selectedPatternID = patterns(for: id).first?.id
             selectedStopSequence = nil
         }
+        persistRouteSelection()
         recalculateArrivals()
     }
     func selectPattern(_ id: String) {
         guard let pattern = patternsByID[id] else { return }
-        selectedRouteIDs.insert(pattern.routeID)
+        rememberRoute(pattern.routeID)
         selectedPrimaryRouteID = pattern.routeID
         selectedPatternID = id
         selectedStopSequence = nil
+        persistRouteSelection()
         recalculateArrivals()
     }
     func selectStop(sequence: Int) {
         guard selectedVisits.contains(where: { $0.sequence == sequence }) else { return }
         selectedStopSequence = sequence
+        persistRouteSelection()
         recalculateArrivals()
     }
-    func clearSelection() {
+    func clearSelection() { removeAllRoutes() }
+
+    func removeAllRoutes() {
+        savedRouteIDs.removeAll()
         selectedRouteIDs.removeAll()
         selectedPrimaryRouteID = nil
         selectedPatternID = nil
         selectedStopSequence = nil
         arrivals = []
+        persistRouteSelection()
+    }
+    func removeRoute(_ id: String) {
+        savedRouteIDs.removeAll { $0 == id }
+        selectedRouteIDs.remove(id)
+        if selectedPrimaryRouteID == id {
+            selectedPrimaryRouteID = savedRouteIDs.first
+            selectedPatternID = selectedPrimaryRouteID.flatMap { patterns(for: $0).first?.id }
+            selectedStopSequence = nil
+        }
+        persistRouteSelection()
+        recalculateArrivals()
     }
     func toggleRoute(_ id: String) {
-        if selectedRouteIDs.contains(id) {
-            selectedRouteIDs.remove(id)
-            if selectedRoute?.id == id {
-                selectedPrimaryRouteID = selectedRouteIDs.sorted().first
-                selectedPatternID = selectedPrimaryRouteID.flatMap { patterns(for: $0).first?.id }
-                selectedStopSequence = nil
-            }
-        } else { selectRoute(id) }
-        recalculateArrivals()
+        if selectedRouteIDs.contains(id) { removeRoute(id) } else { selectRoute(id) }
+    }
+    private func rememberRoute(_ id: String) {
+        if !savedRouteIDs.contains(id) { savedRouteIDs.append(id) }
+        selectedRouteIDs.insert(id)
+    }
+    private func persistRouteSelection() {
+        restoredStopID = selectedStop?.id
+        let saved = SavedRouteSelection(routeIDs: savedRouteIDs, primaryRouteID: selectedPrimaryRouteID,
+                                        patternID: selectedPatternID, stopSequence: selectedStopSequence,
+                                        stopID: restoredStopID)
+        if let data = try? JSONEncoder().encode(saved) { preferences.set(data, forKey: "savedRoutes.v1") }
     }
     private func recalculateArrivals(at now: Date = Date()) {
         guard let patternID = selectedPatternID, let sequence = selectedStopSequence else { arrivals = []; return }
@@ -423,17 +482,19 @@ final class TransitStore: ObservableObject {
               pattern.stops.contains(where: { $0.sequence == favorite.stopSequence && $0.stopID == favorite.stopID }) else {
             statusMessage = "O trajeto deste favorito mudou. Busque a linha e confirme seu ponto novamente."; return
         }
-        selectedRouteIDs.insert(favorite.routeID)
+        rememberRoute(favorite.routeID)
         selectedPrimaryRouteID = favorite.routeID
         selectedPatternID = favorite.patternID
         selectedStopSequence = favorite.stopSequence
+        persistRouteSelection()
         recalculateArrivals()
     }
     private func persistFavorites() {
         if let data = try? JSONEncoder().encode(favorites) { preferences.set(data, forKey: "favorites.v1") }
     }
     func visibleVehicles() -> [TransitVehicle] {
-        vehicles.filter { (selectedRouteIDs.isEmpty || selectedRouteIDs.contains($0.routeID)) && (showStaleVehicles || $0.isFresh()) }
+        guard !selectedRouteIDs.isEmpty else { return [] }
+        return vehicles.filter { selectedRouteIDs.contains($0.routeID) && (showStaleVehicles || $0.isFresh()) }
     }
     func nearestStops(to point: GeoPoint, limit: Int = 12) -> [TransitStop] {
         guard point.isValid else { return [] }
@@ -455,30 +516,46 @@ final class TransitStore: ObservableObject {
 
     #if DEBUG
     private func prepareDemo() {
-        guard let route = catalog?.routes.first(where: { $0.shortName == "369" }),
-              let pattern = patterns(for: route.id).first,
-              let visit = pattern.stops.dropFirst(5).first(where: { $0.distanceReliable && $0.distance > 1600 }) else {
+        var fixtures: [(route: TransitRoute, pattern: TransitPattern, baseProgress: Double, points: [GeoPoint])] = []
+        var mapAnchor: GeoPoint?
+        for shortName in ["369", "397", "SR397"] {
+            guard let route = catalog?.routes.first(where: { $0.shortName == shortName }),
+                  let pattern = patterns(for: route.id).first,
+                  let visit = pattern.stops.dropFirst(5).first(where: { $0.distanceReliable && $0.distance > 1600 }) else { continue }
+            let points = TransitGeometry.decodePolyline(pattern.polyline)
+            guard points.count >= 2 else { continue }
+            var baseProgress = visit.distance - 700
+            if let anchor = mapAnchor {
+                guard let projected = TransitGeometry.project(anchor, onto: points), projected.distance <= 1000 else { continue }
+                baseProgress = projected.progress + Double(fixtures.count) * 150
+            } else {
+                mapAnchor = Self.point(at: baseProgress, on: points).0
+            }
+            fixtures.append((route, pattern, baseProgress, points))
+        }
+        guard fixtures.count == 3 else {
             statusMessage = "DEMONSTRAÇÃO · catálogo de teste incompleto"; return
         }
-        selectedRouteIDs = [route.id]
-        selectedPrimaryRouteID = route.id
-        selectedPatternID = pattern.id
-        selectedStopSequence = visit.sequence
-        let points = TransitGeometry.decodePolyline(pattern.polyline)
         let now = Date()
         for offset in [-60.0, -30.0, 0.0] {
             var batch: [TransitVehicle] = []
-            for i in 0..<3 {
-                let progress = max(20, visit.distance - 700 - Double(i) * 320 + offset * 6)
-                let sample = Self.point(at: progress, on: points)
-                batch.append(TransitVehicle(id: "onibus:DEMO\(i)", vehicleID: "DEMO\(i)", label: "Teste \(i + 1)", source: "onibus", routeID: route.id,
-                    tripID: catalog?.tripPatterns.first(where: { $0.value == pattern.id })?.key, direction: pattern.direction,
-                    latitude: sample.0.latitude, longitude: sample.0.longitude, bearing: sample.1, speed: 6, timestamp: now.addingTimeInterval(offset)))
+            for fixture in fixtures {
+                for i in 0..<3 {
+                    // Each line uses its own official shape. Offset variants slightly so markers do not coincide.
+                    // The original 369 motion window is unchanged for deterministic arrival tests.
+                    let progress = max(20, fixture.baseProgress - Double(i) * 320 + offset * 6)
+                    let sample = Self.point(at: progress, on: fixture.points)
+                    let identifier = "DEMO-\(fixture.route.shortName)-\(i)"
+                    batch.append(TransitVehicle(id: "onibus:" + identifier, vehicleID: identifier,
+                        label: "Teste \(fixture.route.shortName) · \(i + 1)", source: "onibus", routeID: fixture.route.id,
+                        tripID: catalog?.tripPatterns.first(where: { $0.value == fixture.pattern.id })?.key, direction: fixture.pattern.direction,
+                        latitude: sample.0.latitude, longitude: sample.0.longitude, bearing: sample.1, speed: 6, timestamp: now.addingTimeInterval(offset)))
+                }
             }
             engine?.ingest(batch, now: now.addingTimeInterval(offset))
             if offset == 0 { vehicles = batch }
         }
-        sourceStates = [SourceStatus(id: "onibus", name: "Ônibus · teste", lastSuccess: now, vehicleCount: 3, error: nil, feedTimestamp: now), SourceStatus(id: "brt", name: "BRT · teste", lastSuccess: now, vehicleCount: 0, error: nil, feedTimestamp: now)]
+        sourceStates = [SourceStatus(id: "onibus", name: "Ônibus · teste", lastSuccess: now, vehicleCount: vehicles.count, error: nil, feedTimestamp: now), SourceStatus(id: "brt", name: "BRT · teste", lastSuccess: now, vehicleCount: 0, error: nil, feedTimestamp: now)]
         recalculateArrivals()
         statusMessage = "DEMONSTRAÇÃO · posições simuladas para teste"
     }
@@ -497,6 +574,14 @@ final class TransitStore: ObservableObject {
         return (points.last ?? first, 0)
     }
     #endif
+}
+
+private struct SavedRouteSelection: Codable {
+    let routeIDs: [String]
+    let primaryRouteID: String?
+    let patternID: String?
+    let stopSequence: Int?
+    let stopID: String?
 }
 
 private struct FetchOutcome: Sendable {

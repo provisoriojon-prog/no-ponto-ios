@@ -1,6 +1,6 @@
-Primeira versão pessoal do No Ponto: mapa, catálogo municipal e BRT do Rio, localização, sentidos, pontos, favoritos e estimativas com indicação de qualidade dos dados. Sem anúncios ou login.
+No Ponto 1.1: mapa limpo, sem ônibus até você adicionar suas linhas. A busca mostra até oito sugestões a partir de dois dígitos. As linhas escolhidas ficam salvas automaticamente em pequenos círculos coloridos. Ônibus pequenos e direcionais, pontos discretos ao aproximar o mapa e detalhes somente ao tocar. Sem anúncios ou login.
 
-Baixe NoPonto-unsigned.ipa e importe no AltStore Classic para assinar com sua conta Apple. É um app separado do Voa.
+Baixe NoPonto-unsigned.ipa e atualize pelo AltStore Classic usando a mesma conta. O identificador do No Ponto continua igual e os favoritos de embarque existentes são preservados. Não precisa remover a versão anterior.
 
 Compilação ARM64 para iPhone, testes do núcleo e fluxos no simulador verificados pelo workflow. As capturas do simulador usam veículos fictícios explicitamente marcados; o IPA Release consulta os feeds públicos reais da SMTR. Precisão das chegadas e GPS na rua ainda requerem avaliação no iPhone. Não há alertas em segundo plano nesta versão.
 

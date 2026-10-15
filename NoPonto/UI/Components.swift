@@ -5,8 +5,17 @@ enum TransitStyle {
     static let teal = Color(red: 0.00, green: 0.48, blue: 0.48)
     static let blue = Color(red: 0.12, green: 0.39, blue: 0.82)
     static func routeColor(_ route: TransitRoute) -> Color {
-        let palette = ["007A7A", "275FC6", "7852B0", "B35B13", "A83D79", "256D91"]
-        let hash = route.id.utf8.reduce(UInt32(0)) { ($0 &* 31) &+ UInt32($1) }
+        // Distinguish neighboring services even when the official colors match.
+        switch route.shortName.uppercased() {
+        case "369": return color("CC741B")
+        case "397": return color("008C9F")
+        case "SR397": return color("6951B7")
+        default: break
+        }
+        let palette = ["007A7A", "275FC6", "7852B0", "B35B13", "A83D79", "256D91",
+                       "347442", "8B5A2B", "1767A6", "A64432", "675A9B", "356D65",
+                       "985A75", "64692A", "9B3B55", "4B6794"]
+        let hash = route.id.utf8.reduce(UInt32(2_166_136_261)) { ($0 ^ UInt32($1)) &* 16_777_619 }
         return color(palette[Int(hash % UInt32(palette.count))])
     }
     static func color(_ hex: String) -> Color {

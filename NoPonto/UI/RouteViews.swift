@@ -3,35 +3,39 @@ import MapKit
 
 struct RouteSearchView: View {
     @EnvironmentObject private var store: TransitStore
-    @State private var mode = "all"
+    @FocusState private var searchFocused: Bool
     let onSelect: (String) -> Void
 
     private var results: [TransitRoute] {
-        store.searchRoutes(store.searchText).filter { mode == "all" || (mode == "brt" ? $0.isBRT : !$0.isBRT) }
+        guard canSuggest else { return [] }
+        return Array(store.searchRoutes(store.searchText).prefix(8))
+    }
+
+    private var canSuggest: Bool {
+        let digits = store.searchText.filter(\.isNumber).count
+        return digits > 0 ? digits >= 2 : store.searchText.filter(\.isLetter).count >= 2
     }
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("Número, destino ou bairro", text: $store.searchText)
+                    TextField("Número da linha ou destino", text: $store.searchText)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .focused($searchFocused)
                         .accessibilityIdentifier("route-search-field")
                     if !store.searchText.isEmpty {
                         Button { store.searchText = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
                             .accessibilityLabel("Limpar busca")
                     }
                 }.padding(13).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
-                Picker("Tipo de transporte", selection: $mode) {
-                    Text("Todos").tag("all"); Text("Ônibus").tag("bus"); Text("BRT").tag("brt")
-                }.pickerStyle(.segmented)
-                Text("\(results.count) linhas no catálogo · inclusive sem sinal ao vivo")
-                    .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("route-result-count")
             }.padding(16)
-            if store.isLoading && store.catalog == nil {
-                ProgressView("Carregando linhas…").frame(maxWidth: .infinity, maxHeight: .infinity)
+            if !canSuggest {
+                Spacer()
+            } else if store.isLoading && store.catalog == nil {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if results.isEmpty {
-                EmptyTransitState(symbol: "magnifyingglass", title: "Nenhuma linha encontrada", message: "Tente o número completo, incluindo letras, ou uma parte do destino.")
+                Text("Nenhuma linha encontrada").font(.subheadline).foregroundStyle(.secondary).padding(24)
                 Spacer()
             } else {
                 List(results) { route in
@@ -42,7 +46,8 @@ struct RouteSearchView: View {
             }
         }
         .background(Color(.systemGroupedBackground))
-        .navigationTitle("Encontrar uma linha").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("Buscar linha").navigationBarTitleDisplayMode(.inline)
+        .task { searchFocused = true }
     }
 }
 
@@ -53,8 +58,7 @@ private struct RouteSearchRow: View {
             RouteBadge(route: route)
             VStack(alignment: .leading, spacing: 4) {
                 Text(route.longName).font(.subheadline.weight(.medium)).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
-                Text(route.isBRT ? "BRT · \(route.patternIDs.count) percursos" : "Ônibus municipal · \(route.patternIDs.count) percursos")
-                    .font(.caption).foregroundStyle(.secondary)
+                if route.isBRT { Text("BRT").font(.caption).foregroundStyle(.secondary) }
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)

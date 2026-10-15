@@ -107,7 +107,7 @@ struct TransitSettingsView: View {
     var body: some View {
         Form {
             Section("Seu mapa") {
-                Toggle("Mostrar pontos e estações", isOn: $store.showStops)
+                Toggle("Pontos discretos no mapa", isOn: $store.showStops)
                 Toggle("Mostrar veículos com sinal antigo", isOn: $store.showStaleVehicles)
                 Picker("Aparência", selection: $appearance) {
                     Text("Automática").tag("system")
@@ -115,7 +115,7 @@ struct TransitSettingsView: View {
                     Text("Escura").tag("dark")
                 }
             }
-            Section {
+            DisclosureGroup("Fontes ao vivo") {
                 TimelineView(.periodic(from: .now, by: 15)) { context in
                     ForEach(store.sourceStates) { source in SourceHealthRow(source: source, now: context.date) }
                 }
@@ -124,11 +124,11 @@ struct TransitSettingsView: View {
                 Text("Atualizações enquanto o app está aberto. Um servidor funcionando não garante que todos os veículos estejam transmitindo.")
                     .font(.caption).foregroundStyle(.secondary)
                 if store.unknownRouteCount > 0 {
-                    Text("\(store.unknownRouteCount) identificadores de linha ao vivo ainda sem correspondência no catálogo. Esses veículos aparecem com ? e não recebem estimativas.")
+                    Text("\(store.unknownRouteCount) identificadores ao vivo ainda sem correspondência no catálogo. Eles não aparecem entre suas linhas salvas.")
                         .font(.caption).foregroundStyle(.orange)
                 }
-            } header: { Text("Fontes ao vivo") }
-            Section("Catálogo e cobertura") {
+            }
+            DisclosureGroup("Catálogo e cobertura") {
                 LabeledContent("Linhas", value: "\(store.catalog?.routes.count ?? 0)")
                 LabeledContent("Pontos e estações", value: "\(store.catalog?.stops.count ?? 0)")
                 Text(store.catalogNotice).font(.caption).foregroundStyle(.secondary)
@@ -155,13 +155,13 @@ struct TransitSettingsView: View {
                 }
                 Text("Confirme sempre o ponto e o destino. A precisão do GPS e da bússola varia; o app não determina com certeza em qual calçada você está.").font(.caption).foregroundStyle(.secondary)
             }
-            Section("Sem anúncios. Sem cadastro.") {
+            DisclosureGroup("Privacidade") {
                 Text("Favoritos ficam neste aparelho. A localização orienta o mapa e os pontos próximos. Ao calcular uma caminhada, origem e destino são enviados ao Apple Maps. Mapas e fontes públicas precisam de internet.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Sem conexão, o catálogo e os favoritos continuam disponíveis. Posições guardadas mantêm a data do sinal e não são apresentadas como movimento ao vivo.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Créditos e dados") {
+            DisclosureGroup("Créditos e dados") {
                 Link("SMTR · Catálogo GTFS", destination: URL(string: "https://dados.mobilidade.rio/gtfs/schedule")!)
                 Link("DATA.RIO · Dados públicos", destination: URL(string: "https://www.data.rio/")!)
                 Link("Licença dos dados · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
