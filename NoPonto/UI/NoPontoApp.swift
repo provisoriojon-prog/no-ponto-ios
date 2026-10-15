@@ -116,6 +116,9 @@ struct TransitHomeView: View {
             awaitingLocation = false
             locationAlert = message
         }
+        .onChange(of: store.selectedPatternID) { _, _ in
+            location.clearWalkingRoute()
+        }
     }
 
     private var settingsMenu: some View {
