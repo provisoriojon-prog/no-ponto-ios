@@ -1,0 +1,131 @@
+name: Build and verify No Ponto for iPhone
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: no-ponto-main
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v6
+      - name: Import source package uploaded from Windows
+        run: |
+          if [ -f bootstrap.zip ]; then
+            python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+          roots = {'NoPonto', 'AppTests', 'UITests', 'Tests', 'scripts'}
+          files = {'project.yml', 'README.md', '.gitignore'}
+          with ZipFile('bootstrap.zip') as z:
+              assert sum(i.file_size for i in z.infolist()) < 50000000
+              for i in z.infolist():
+                  p = PurePosixPath(i.filename)
+                  assert not p.is_absolute() and '..' not in p.parts
+                  assert p.parts[0] in roots or i.filename in files, i.filename
+                  assert '\\' not in i.filename
+                  if i.is_dir():
+                      continue
+                  target = Path(*p.parts)
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(z.read(i))
+          PY
+            git rm bootstrap.zip
+            git add NoPonto AppTests UITests Tests scripts project.yml README.md .gitignore
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Import No Ponto source and validation from Windows [skip ci]'
+            git push origin HEAD:main
+          fi
+          echo "SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Record build environment
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          mkdir -p dist build
+          sw_vers | tee dist/build-environment.txt
+          xcodebuild -version | tee -a dist/build-environment.txt
+          xcrun --sdk iphoneos --show-sdk-version | tee -a dist/build-environment.txt
+          echo "$SOURCE_COMMIT" > dist/source-commit.txt
+      - name: Validate official catalog and transit engine
+        run: |
+          set -o pipefail
+          python3 scripts/test_catalog.py 2>&1 | tee dist/catalog-tests.txt
+          swiftc -O NoPonto/Models.swift NoPonto/Core/*.swift Tests/CoreTests.swift -o build/core-tests
+          build/core-tests Tests/Fixtures/official-onibus-snapshot.pb Tests/Fixtures/official-brt-snapshot.pb NoPonto/Resources/catalog.json | tee dist/core-tests.txt
+          python3 scripts/probe_live.py > dist/live-sources.json
+      - name: Generate original icon and Xcode project
+        run: |
+          swift scripts/make_icon.swift NoPonto/Assets.xcassets
+          cp NoPonto/Assets.xcassets/AppIcon.appiconset/Icon-1024.png dist/NoPonto-icon.png
+          brew install xcodegen
+          xcodegen generate
+      - name: Compile real iPhone application
+        run: |
+          set -o pipefail
+          xcodebuild -project NoPonto.xcodeproj -scheme NoPonto -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath build/NoPonto.xcarchive CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            archive 2>&1 | tee dist/xcodebuild.log
+      - name: Verify app flows on an iPhone simulator
+        run: |
+          set -o pipefail
+          xcrun simctl list devices available -j > build/simulators.json
+          DEVICE_ID=$(python3 -c 'import json; d=json.load(open("build/simulators.json")); print(next(v["udid"] for k,vs in sorted(d["devices"].items(),reverse=True) if "iOS" in k for v in vs if "iPhone" in v["name"] and v.get("isAvailable",False)))')
+          echo "$DEVICE_ID" > dist/simulator-device.txt
+          xcodebuild -project NoPonto.xcodeproj -scheme NoPonto -configuration Debug \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
+            -resultBundlePath build/NoPontoTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            test 2>&1 | tee dist/simulator-tests.log
+      - name: Export simulator evidence
+        if: always()
+        run: |
+          if [ -d build/NoPontoTests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/NoPontoTests.xcresult --output-path build/screenshots || true
+            python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          shots = sorted(Path('build/screenshots').rglob('*.png'))
+          for i, shot in enumerate(shots[:30], 1):
+              shutil.copy2(shot, f'dist/NoPonto-simulator-{i}.png')
+          print(f'Exported {len(shots)} simulator screenshots; demonstration positions are labeled in app')
+          PY
+          fi
+      - name: Package and inspect IPA
+        run: |
+          mkdir -p build/package/Payload
+          cp -R build/NoPonto.xcarchive/Products/Applications/NoPonto.app build/package/Payload/
+          cd build/package
+          zip -r -q ../../dist/NoPonto-unsigned.ipa Payload
+          cd ../..
+          file build/package/Payload/NoPonto.app/NoPonto | tee dist/binary-inspection.txt
+          xcrun lipo -archs build/package/Payload/NoPonto.app/NoPonto | tee -a dist/binary-inspection.txt
+          python3 scripts/verify_ipa.py dist/NoPonto-unsigned.ipa > dist/verification.json
+          cp NoPonto/Resources/catalog.json dist/catalog.json
+          cp NoPonto/Resources/catalog-audit.json dist/catalog-audit.json
+          shasum -a 256 dist/NoPonto-unsigned.ipa > dist/SHA256.txt
+          zip -r -q dist/NoPonto-source.zip NoPonto AppTests UITests Tests scripts project.yml README.md .github/workflows/build-ios.yml -x '*/__pycache__/*'
+          cat dist/verification.json dist/core-tests.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Save build evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: NoPonto-IPA-and-proof
+          path: dist/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Publish installable package and editable source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "noponto-${GITHUB_RUN_NUMBER}" dist/* \
+            --target "$SOURCE_COMMIT" --title "No Ponto 1.0 - build ${GITHUB_RUN_NUMBER}" \
+            --notes-file scripts/release-notes.txt
