@@ -73,9 +73,10 @@ struct TransitMap: UIViewRepresentable {
             let center = CLLocationCoordinate2D(latitude: focus.point.latitude, longitude: focus.point.longitude)
             map.setRegion(MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: focus.span, longitudeDelta: focus.span)), animated: true)
         }
-        if followHeading != coordinator.wasFollowingHeading {
-            coordinator.wasFollowingHeading = followHeading
-            map.setUserTrackingMode(followHeading ? .followWithHeading : .none, animated: true)
+        let canFollowHeading = followHeading && location != nil
+        if canFollowHeading != coordinator.wasFollowingHeading {
+            coordinator.wasFollowingHeading = canFollowHeading
+            map.setUserTrackingMode(canFollowHeading ? .followWithHeading : .none, animated: true)
         }
         coordinator.updateAnnotations(map)
     }

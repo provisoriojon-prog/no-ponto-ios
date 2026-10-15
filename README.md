@@ -23,6 +23,8 @@ O GPS pode não distinguir calçadas opostas. Sempre confirme ponto e destino. D
 
 Sem internet, catálogo e favoritos continuam disponíveis. Posições guardadas exibem a idade do sinal. O mapa-base depende do cache do Apple Maps; não prometemos um mapa totalmente disponível sem conexão.
 
+Dados de transporte atribuídos à Prefeitura do Rio / SMTR sob [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). O catálogo foi convertido, as geometrias simplificadas e as previsões calculadas independentemente pelo No Ponto.
+
 ## Privacidade
 
 Favoritos e preferências ficam neste aparelho. Não há backend próprio de telemetria, rastreamento publicitário ou histórico de localização enviado ao desenvolvedor. Consultas aos serviços públicos e à Apple utilizam a conexão do aparelho; ao solicitar uma caminhada, o Apple Maps recebe origem e destino. A localização é pedida apenas após uma ação do usuário.

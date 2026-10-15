@@ -51,7 +51,7 @@ struct TransitHomeView: View {
             TransitMap(routes: store.catalog?.routes ?? [], pattern: store.selectedPattern,
                        stops: displayedStops, selectedStopID: store.selectedStop?.id,
                        vehicles: store.visibleVehicles(), showStops: store.showStops,
-                       location: location.location, walkingRoute: location.walkingRoute,
+                       location: location.currentLocation, walkingRoute: location.walkingRoute,
                        focus: mapFocus, followHeading: followsHeading,
                        onStop: inspectStop, onVehicle: selectRoute)
                 .ignoresSafeArea()
@@ -113,7 +113,7 @@ struct TransitHomeView: View {
                 Text(message).font(.caption).padding(12)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)).frame(maxWidth: 245)
                     .accessibilityIdentifier("location-message")
-            } else if let heading = location.heading {
+            } else if let heading = location.currentHeading {
                 Label("\(Int((heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading).rounded()))° · \(location.accuracyText)", systemImage: "location.north.line")
                     .font(.caption2).padding(10).background(.regularMaterial, in: Capsule())
             }
@@ -235,7 +235,8 @@ struct TransitHomeView: View {
     }
 
     private func inspectStop(_ stopID: String) {
-        if let visit = store.selectedPattern?.stops.first(where: { $0.stopID == stopID }) {
+        let visits = store.selectedPattern?.stops.filter { $0.stopID == stopID } ?? []
+        if visits.count == 1, let visit = visits.first {
             store.selectStop(sequence: visit.sequence)
             sheet = .line
         } else if let stop = store.stop(stopID) { inspectedStop = stop; sheet = .stop }

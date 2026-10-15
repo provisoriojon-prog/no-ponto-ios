@@ -164,6 +164,8 @@ struct TransitSettingsView: View {
             Section("Créditos e dados") {
                 Link("SMTR · Catálogo GTFS", destination: URL(string: "https://dados.mobilidade.rio/gtfs/schedule")!)
                 Link("DATA.RIO · Dados públicos", destination: URL(string: "https://www.data.rio/")!)
+                Link("Licença dos dados · CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!)
+                Text("Catálogo convertido e geometrias simplificadas para uso neste app. Previsões de chegada calculadas pelo No Ponto.").font(.caption).foregroundStyle(.secondary)
                 Text("Mapa e rotas a pé: Apple Maps. Dados de transporte: Prefeitura do Rio / SMTR. Aplicativo independente, sem vínculo com a Prefeitura ou com outros aplicativos de ônibus.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("No Ponto · \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")")
