@@ -57,8 +57,12 @@ final class NoPontoUITests: XCTestCase {
         XCTAssertFalse(app.buttons["line-detail-button"].exists)
 
         savedRoute("369").tap()
-        XCTAssertTrue(app.buttons["line-detail-button"].waitForExistence(timeout: 10))
-        app.buttons["line-detail-button"].tap()
+        capture("linha-369-primeiro-toque")
+        let active = XCTNSPredicateExpectation(predicate: NSPredicate { [weak self] _, _ in
+            self?.savedRoute("369").value as? String == "ativa"
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [active], timeout: 10), .completed, "O toque deve ativar a linha 369")
+        openContextDetails()
         XCTAssertTrue(app.buttons["choose-stop-button"].waitForExistence(timeout: 10))
         app.buttons["choose-stop-button"].tap()
         let banguStop = app.buttons["stop-4"] // Almeida Pires, official 369 stop near the three demo routes.
@@ -70,7 +74,7 @@ final class NoPontoUITests: XCTestCase {
         app.buttons["Fechar informação"].tap()
         capture("05-mapa-local-tres-linhas")
         savedRoute("369").tap()
-        app.buttons["line-detail-button"].tap()
+        openContextDetails()
         XCTAssertTrue(app.buttons["choose-pattern-button"].waitForExistence(timeout: 10))
         app.buttons["choose-pattern-button"].tap()
         let otherDirection = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'pattern-' AND value == 'sentido-1'")).firstMatch
@@ -160,6 +164,22 @@ final class NoPontoUITests: XCTestCase {
     private func waitUntilGone(_ element: XCUIElement) {
         let absent = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !element.exists }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [absent], timeout: 15), .completed)
+    }
+
+    private func openContextDetails() {
+        let button = app.buttons["line-detail-button"]
+        let exists = button.waitForExistence(timeout: 10)
+        capture("contexto-apos-toque-na-linha")
+        if !exists {
+            let tree = XCTAttachment(string: app.debugDescription)
+            tree.name = "contexto-hierarquia-acessibilidade"
+            tree.lifetime = .keepAlways
+            add(tree)
+            print("CONTEXT_ACCESSIBILITY_DIAGNOSTIC\n\(app.debugDescription)")
+        }
+        XCTAssertTrue(exists, "O toque na linha deve revelar o cartão contextual acessível")
+        XCTAssertTrue(button.isHittable, "O cartão contextual deve ser tocável")
+        button.tap()
     }
 
     private func waitForCatalog() {

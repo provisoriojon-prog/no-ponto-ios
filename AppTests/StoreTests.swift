@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class StoreTests: XCTestCase {
-    func testCatalogSearchPreservesCatalogAndSuggestsOnlyAfterThreshold() async {
+    func testCatalogSearchPreservesCatalogAndSuggestsOnlyAfterThreshold() async throws {
         let store = TransitStore(testing: true, resetTestState: true)
         await store.start()
         XCTAssertFalse(store.isLoading)
@@ -17,8 +17,13 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(results.contains { $0.shortName == "SR397" })
         XCTAssertTrue(results.contains { $0.shortName == "SN397" })
         XCTAssertEqual(results.first?.shortName, "397")
-        XCTAssertEqual(store.searchRoutes("SR39").first?.shortName, "SR397")
-        XCTAssertEqual(store.searchRoutes("SN39").first?.shortName, "SN397")
+        for prefix in ["SR", "SN"] {
+            let suggestions = store.searchRoutes(prefix + "39").map(\.shortName)
+            let index393 = try XCTUnwrap(suggestions.firstIndex(of: prefix + "393"))
+            let index397 = try XCTUnwrap(suggestions.firstIndex(of: prefix + "397"))
+            XCTAssertLessThan(index393, index397, "A partial prefix orders 393 before 397 without omitting the requested variant")
+            XCTAssertEqual(store.searchRoutes(prefix + "397").first?.shortName, prefix + "397", "An exact prefixed number ranks first")
+        }
         XCTAssertFalse(store.searchRoutes("bangu").isEmpty)
         XCTAssertEqual(TransitStore.normalized("São Conrado"), TransitStore.normalized("sao conrado"))
         XCTAssertFalse(store.searchRoutes("10", mode: "brt").isEmpty)

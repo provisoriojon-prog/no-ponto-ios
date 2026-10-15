@@ -194,6 +194,7 @@ struct TransitHomeView: View {
         }
         .buttonStyle(.plain).accessibilityLabel("Linha \(route.shortName)")
         .accessibilityIdentifier("saved-route-\(route.id)")
+        .accessibilityValue(store.selectedRoute?.id == route.id ? "ativa" : "salva")
         .contextMenu {
             Button("Ver linha e pontos", systemImage: "bus") { store.selectRoute(route.id); sheet = .line }
             Button("Remover linha", systemImage: "trash", role: .destructive) {
@@ -214,14 +215,19 @@ struct TransitHomeView: View {
                     }
                     Spacer(minLength: 0)
                 }.contentShape(Rectangle())
-            }.buttonStyle(.plain).accessibilityIdentifier("line-detail-button")
+            }.buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(contextTitle), \(contextSubtitle)")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Abre os detalhes da linha ou do ponto")
+                .accessibilityIdentifier("line-detail-button")
             Button { showsContext = false } label: {
                 Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).frame(width: 22, height: 32)
             }.foregroundStyle(.secondary).accessibilityLabel("Fechar informação")
         }.padding(.leading, 13).padding(.trailing, 6).padding(.vertical, 12)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
             .shadow(color: .black.opacity(0.13), radius: 9, y: 3)
-            .accessibilityIdentifier("contextual-arrival")
+            .accessibilityElement(children: .contain)
     }
 
     private var contextTitle: String { inspectedStop?.name ?? "Linha \(store.selectedRoute?.shortName ?? "")" }
