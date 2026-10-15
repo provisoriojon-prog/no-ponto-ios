@@ -74,13 +74,29 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             archive 2>&1 | tee dist/xcodebuild.log
       - name: Verify app flows on an iPhone simulator
+        timeout-minutes: 20
         run: |
           set -o pipefail
           xcrun simctl list devices available -j > build/simulators.json
-          DEVICE_ID=$(python3 -c 'import json; d=json.load(open("build/simulators.json")); print(next(v["udid"] for k,vs in sorted(d["devices"].items(),reverse=True) if "iOS" in k for v in vs if "iPhone" in v["name"] and v.get("isAvailable",False)))')
-          echo "$DEVICE_ID" > dist/simulator-device.txt
+          python3 - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+          sdk = subprocess.check_output(['xcrun', '--sdk', 'iphonesimulator', '--show-sdk-version'], text=True).strip()
+          runtime = 'com.apple.CoreSimulator.SimRuntime.iOS-' + sdk.replace('.', '-')
+          devices = json.loads(Path('build/simulators.json').read_text())['devices']
+          candidates = [v for v in devices.get(runtime, []) if v.get('isAvailable', False) and v['name'].startswith('iPhone')]
+          if not candidates:
+              raise SystemExit(f'No available iPhone for SDK {sdk}; required runtime {runtime}; available runtimes: {sorted(devices)}')
+          device = min(candidates, key=lambda v: (v['name'] != 'iPhone 16', v['name'], v['udid']))
+          Path('dist/simulator-device.txt').write_text(device['udid'] + '\n')
+          print(f"Booting {device['name']} on SDK-matched runtime {runtime}: {device['udid']}", flush=True)
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True, timeout=300)
+          PY
+          DEVICE_ID=$(cat dist/simulator-device.txt)
           xcodebuild -project NoPonto.xcodeproj -scheme NoPonto -configuration Debug \
             -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -destination-timeout 120 \
             -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
             -resultBundlePath build/NoPontoTests.xcresult \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
@@ -127,5 +143,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "noponto-${GITHUB_RUN_NUMBER}" dist/* \
-            --target "$SOURCE_COMMIT" --title "No Ponto 1.0 - build ${GITHUB_RUN_NUMBER}" \
+            --target "$SOURCE_COMMIT" --title "No Ponto 1.1 - build ${GITHUB_RUN_NUMBER}" \
             --notes-file scripts/release-notes.txt
