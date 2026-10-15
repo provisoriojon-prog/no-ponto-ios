@@ -101,12 +101,20 @@ final class NoPontoUITests: XCTestCase {
         app.buttons["confirm-favorite-button"].tap()
         XCTAssertTrue(app.buttons["choose-stop-button"].waitForExistence(timeout: 10))
         app.buttons["Fechar"].firstMatch.tap()
+        verifyReturnedToMap()
         app.buttons["settings-menu"].tap()
         app.buttons["Favoritos de embarque"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts[favoriteName].waitForExistence(timeout: 10), "Favoritos continuam acessíveis pelo menu secundário")
         app.buttons["Fechar"].firstMatch.tap()
-        app.buttons["saved-routes-menu"].tap()
-        app.buttons["Remover todas"].firstMatch.tap()
+        verifyReturnedToMap(saved: "369")
+        // SwiftUI Menu may be exposed as a PopUpButton instead of a Button.
+        // Match stable identifiers across accessibility roles, then wait for the open menu.
+        let savedMenu = app.descendants(matching: .any).matching(identifier: "saved-routes-menu").firstMatch
+        waitUntilHittable(savedMenu, "O menu de linhas salvas deve estar tocável após fechar favoritos")
+        savedMenu.tap()
+        let removeAll = app.descendants(matching: .any).matching(identifier: "remove-all-routes").firstMatch
+        waitUntilHittable(removeAll, "Remover todas deve aparecer no menu aberto")
+        removeAll.tap()
         verifyReturnedToMap()
         XCTAssertEqual(savedRoutes.count, 0)
         XCTAssertFalse(app.buttons["line-detail-button"].exists)
@@ -173,13 +181,20 @@ final class NoPontoUITests: XCTestCase {
         // Querying a dismantled TextField repeatedly can stall AX snapshots during MapKit rendering.
         if let number {
             let chip = savedRoute(number)
-            XCTAssertTrue(chip.waitForExistence(timeout: 30), "A linha escolhida deve estar salva no mapa")
-            XCTAssertTrue(chip.isHittable, "A linha salva deve estar tocável, sem a busca por cima")
+            waitUntilHittable(chip, "A linha salva deve estar tocável, sem uma janela por cima")
         }
         let search = app.buttons["search-button"]
-        XCTAssertTrue(search.waitForExistence(timeout: 30))
-        XCTAssertTrue(search.isHittable, "O mapa deve estar novamente interagível")
+        waitUntilHittable(search, "O mapa deve estar novamente interagível")
         XCTAssertFalse(app.textFields["route-search-field"].exists, "A busca deve ter fechado após a seleção")
+    }
+
+    private func waitUntilHittable(_ element: XCUIElement, _ message: String,
+                                  file: StaticString = #filePath, line: UInt = #line) {
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            element.exists && element.isHittable
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 30), .completed,
+                       message, file: file, line: line)
     }
 
     private func openContextDetails() {
