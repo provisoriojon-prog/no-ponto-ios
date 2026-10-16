@@ -4,7 +4,10 @@ import MapKit
 struct RouteSearchView: View {
     @EnvironmentObject private var store: TransitStore
     @FocusState private var searchFocused: Bool
+    @ScaledMetric(relativeTo: .subheadline) private var rowHeight: CGFloat = 70
+    let maxSuggestionsHeight: CGFloat
     let onSelect: (String) -> Void
+    let onClose: () -> Void
 
     private var results: [TransitRoute] {
         guard canSuggest else { return [] }
@@ -16,48 +19,83 @@ struct RouteSearchView: View {
         return digits > 0 ? digits >= 2 : store.searchText.filter(\.isLetter).count >= 2
     }
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("Número da linha ou destino", text: $store.searchText)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                        .focused($searchFocused)
-                        .accessibilityIdentifier("route-search-field")
-                    if !store.searchText.isEmpty {
-                        Button { store.searchText = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                            .accessibilityLabel("Limpar busca")
-                    }
-                }.padding(13).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
-            }.padding(16)
-            if !canSuggest {
-                Spacer()
-            } else if store.isLoading && store.catalog == nil {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if results.isEmpty {
-                Text("Nenhuma linha encontrada").font(.subheadline).foregroundStyle(.secondary).padding(24)
-                Spacer()
-            } else {
-                List(results) { route in
-                    Button { searchFocused = false; onSelect(route.id) } label: { RouteSearchRow(route: route) }
-                        .buttonStyle(.plain).accessibilityIdentifier("route-row-\(route.id)")
-                        .accessibilityLabel("\(route.isBRT ? "BRT" : "Linha") \(route.shortName), \(route.longName)")
-                }.listStyle(.plain)
+        VStack(spacing: 8) {
+            searchBar
+            if canSuggest {
+                suggestionsCard
             }
         }
-        .background(Color(.systemGroupedBackground))
-        .navigationTitle("Buscar linha").navigationBarTitleDisplayMode(.inline)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("route-search-overlay")
         .task { searchFocused = true }
     }
+
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.secondary).accessibilityHidden(true)
+            TextField("Linha ou destino", text: $store.searchText)
+                .font(.body).textInputAutocapitalization(.never).autocorrectionDisabled()
+                .submitLabel(.search).focused($searchFocused)
+                .onSubmit { searchFocused = false }
+                .accessibilityIdentifier("route-search-field")
+            if !store.searchText.isEmpty {
+                Button { store.searchText = ""; searchFocused = true } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        .frame(width: 28, height: 40)
+                }.buttonStyle(.plain).accessibilityLabel("Limpar busca")
+                    .accessibilityIdentifier("clear-search-button")
+            }
+            Divider().frame(height: 23)
+            Button { searchFocused = false; onClose() } label: {
+                Image(systemName: "xmark").font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.primary).frame(width: 40, height: 44)
+            }.buttonStyle(.plain).accessibilityLabel("Fechar busca")
+                .accessibilityIdentifier("close-search-button")
+        }.padding(.leading, 16).padding(.trailing, 5).padding(.vertical, 5)
+            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 18))
+            .shadow(color: .black.opacity(0.14), radius: 9, y: 3)
+    }
+
+    private var suggestionsCard: some View {
+        Group {
+            if store.isLoading && store.catalog == nil {
+                ProgressView().frame(maxWidth: .infinity).padding(20)
+            } else if results.isEmpty {
+                Text("Nenhuma linha encontrada").font(.subheadline).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity).padding(20)
+            } else {
+                ScrollView(.vertical) {
+                    VStack(spacing: 0) {
+                        ForEach(results) { route in
+                            Button { searchFocused = false; onSelect(route.id) } label: {
+                                RouteSearchRow(route: route)
+                                    .padding(.horizontal, 14).frame(height: height(for: route))
+                            }.buttonStyle(.plain).accessibilityIdentifier("route-row-\(route.id)")
+                                .accessibilityLabel("\(route.isBRT ? "BRT" : "Linha") \(route.shortName), \(route.longName)")
+                            if route.id != results.last?.id { Divider().padding(.leading, 14) }
+                        }
+                    }
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(height: min(maxSuggestionsHeight, results.reduce(0) { $0 + height(for: $1) } + CGFloat(max(0, results.count - 1))))
+            }
+        }
+        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 18))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .shadow(color: .black.opacity(0.12), radius: 9, y: 3)
+    }
+
+    private func height(for route: TransitRoute) -> CGFloat { rowHeight + (route.isBRT ? 16 : 0) }
 }
 
 private struct RouteSearchRow: View {
     let route: TransitRoute
     var body: some View {
         HStack(spacing: 12) {
-            RouteBadge(route: route)
+            RouteBadge(route: route, compact: true)
             VStack(alignment: .leading, spacing: 4) {
-                Text(route.longName).font(.subheadline.weight(.medium)).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
+                Text(route.longName).font(.subheadline.weight(.medium)).foregroundStyle(.primary).lineLimit(2)
                 if route.isBRT { Text("BRT").font(.caption).foregroundStyle(.secondary) }
             }
             Spacer(minLength: 0)

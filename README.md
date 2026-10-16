@@ -5,12 +5,12 @@ App independente para acompanhar ônibus municipais e BRT do Rio no iPhone. Inte
 ## Uso
 
 1. Instale o `NoPonto-unsigned.ipa` pelo AltStore Classic já configurado no seu iPhone. O arquivo precisa ser assinado pelo seu fluxo AltStore; o build do GitHub não contém certificado Apple pessoal. A renovação depende da sua conta e configuração do AltStore.
-2. O primeiro mapa começa sem ônibus. Toque na lupa e digite pelo menos dois dígitos (ou duas letras de um destino). Surgem até oito sugestões, preservando prefixos como SR397 e SN397.
-3. Ao escolher uma linha, ela é salva automaticamente e a busca fecha. Só suas linhas aparecem no mapa, com pequenos veículos coloridos e círculos de acesso à esquerda. Elas continuam salvas ao reabrir o app. O menu permite remover uma ou todas.
+2. O primeiro mapa começa sem ônibus. Toque na lupa para abrir a barra no topo do mapa e digite pelo menos dois dígitos (ou duas letras de um destino). Surgem até oito sugestões, preservando prefixos como SR397 e SN397.
+3. Ao escolher uma linha, ela é salva automaticamente e a busca fecha. Só suas linhas aparecem no mapa, com pequenas setas coloridas indicando o deslocamento informado pelo GPS e círculos de acesso à esquerda. Elas continuam salvas ao reabrir o app. O menu permite remover uma ou todas.
 4. Toque em uma linha ou veículo para revelar a informação contextual; abra os detalhes para confirmar **sentido**, **ponto de embarque** e consultar estimativas. Favoritos de embarque como “Ida” e “Volta” continuam disponíveis pelo menu.
-5. Pontos são marcas discretas, visíveis de perto. Toque no botão de localização para se orientar; “Como chegar ao ponto” calcula uma caminhada pelo Apple Maps quando solicitado. Diagnósticos e configurações ficam na engrenagem.
+5. A busca flutua sobre o mapa, com sugestões logo abaixo do campo. Feche no X para voltar. Sem direção válida no sinal GPS, o veículo usa um marcador neutro sem seta. Pontos são marcas discretas, visíveis de perto. Toque no botão de localização para se orientar; “Como chegar ao ponto” calcula uma caminhada pelo Apple Maps quando solicitado. Diagnósticos e configurações ficam na engrenagem.
 
-A versão 1.1 mantém o identificador do aplicativo. Atualize pelo mesmo AltStore sem desinstalar para preservar os favoritos existentes. Eles não ativam linhas automaticamente no novo mapa.
+A versão 1.2 mantém o identificador do aplicativo. Atualize pelo mesmo AltStore sem desinstalar para preservar os favoritos existentes. Eles não ativam linhas automaticamente no novo mapa.
 
 O app exige iOS 17 ou superior. As atualizações funcionam enquanto ele está aberto. Não há promessa de atualização contínua ou alertas de chegada em segundo plano nesta versão.
 

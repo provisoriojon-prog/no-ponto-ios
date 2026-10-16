@@ -1,4 +1,4 @@
-No Ponto 1.1: mapa limpo, sem ônibus até você adicionar suas linhas. A busca mostra até oito sugestões a partir de dois dígitos. As linhas escolhidas ficam salvas automaticamente em pequenos círculos coloridos. Ônibus pequenos e direcionais, pontos discretos ao aproximar o mapa e detalhes somente ao tocar. Sem anúncios ou login.
+No Ponto 1.2: ônibus agora aparecem como pequenas setas coloridas apontando no sentido do GPS, inclusive ao girar o mapa. A lupa abre uma barra flutuante no topo do mapa, com até oito sugestões logo abaixo a partir de dois dígitos. Selecionar continua salvando a linha automaticamente. Sem direção válida, o veículo fica com marcador neutro. Mapa limpo, pontos discretos e detalhes somente ao tocar.
 
 Baixe NoPonto-unsigned.ipa e atualize pelo AltStore Classic usando a mesma conta. O identificador do No Ponto continua igual e os favoritos de embarque existentes são preservados. Não precisa remover a versão anterior.
 

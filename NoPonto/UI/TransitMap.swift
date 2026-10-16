@@ -7,6 +7,16 @@ struct MapFocus: Equatable {
     var span: Double = 0.008
 }
 
+enum VehicleMarkerOrientation {
+    // GTFS bearing and the map camera both turn clockwise from geographic north.
+    // Missing/invalid feed values must not silently become a north-facing arrow.
+    static func screenDegrees(bearing: Double?, cameraHeading: Double) -> Double? {
+        guard let bearing, bearing.isFinite, (0...360).contains(bearing), cameraHeading.isFinite else { return nil }
+        let relative = (bearing - cameraHeading).truncatingRemainder(dividingBy: 360)
+        return relative < 0 ? relative + 360 : relative
+    }
+}
+
 private final class TransitAnnotation: NSObject, MKAnnotation {
     enum Kind { case stop, bus }
     let key: String
@@ -281,9 +291,10 @@ struct TransitMap: UIViewRepresentable {
                 view.zPriority = .max
                 view.selectedZPriority = .max
                 let color = annotation.routeID.flatMap { routeLookup[$0] }.map { UIColor(TransitStyle.routeColor($0)) } ?? UIColor.secondaryLabel
-                let bearing: Double? = annotation.bearing.flatMap { $0.isFinite ? $0 - map.camera.heading : nil }
+                let bearing = VehicleMarkerOrientation.screenDegrees(bearing: annotation.bearing, cameraHeading: map.camera.heading)
                 view.image = busImage(bearing: bearing, stale: annotation.stale, routeColor: color)
                 view.accessibilityLabel = "Ônibus \(annotation.title ?? ""), \(annotation.subtitle ?? "")"
+                view.accessibilityValue = bearing == nil ? "Direção não informada" : nil
                 view.accessibilityHint = "Ver próxima chegada desta linha"
             }
         }
@@ -305,24 +316,30 @@ struct TransitMap: UIViewRepresentable {
         }
 
         private func busImage(bearing: Double?, stale: Bool, routeColor: UIColor) -> UIImage {
-            UIGraphicsImageRenderer(size: CGSize(width: 24, height: 24)).image { context in
+            let side: CGFloat = bearing == nil ? 20 : 28
+            return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { context in
                 let color = stale ? routeColor.withAlphaComponent(0.45) : routeColor
+                let marker: UIBezierPath
                 if let bearing {
-                    context.cgContext.saveGState()
-                    context.cgContext.translateBy(x: 12, y: 12)
+                    context.cgContext.translateBy(x: side / 2, y: side / 2)
                     context.cgContext.rotate(by: CGFloat(bearing * .pi / 180))
-                    let arrow = UIBezierPath()
-                    arrow.move(to: CGPoint(x: 0, y: -12))
-                    arrow.addLine(to: CGPoint(x: -4.5, y: -5))
-                    arrow.addLine(to: CGPoint(x: 4.5, y: -5))
-                    arrow.close()
-                    color.setFill(); arrow.fill()
-                    context.cgContext.restoreGState()
+                    // Entire marker points along the reported course; the inset keeps
+                    // its white outline inside the bitmap at every camera rotation.
+                    marker = UIBezierPath()
+                    marker.move(to: CGPoint(x: 0, y: -11.5))
+                    marker.addLine(to: CGPoint(x: 8, y: 9))
+                    marker.addLine(to: CGPoint(x: 0, y: 5))
+                    marker.addLine(to: CGPoint(x: -8, y: 9))
+                    marker.close()
+                } else {
+                    // A square is deliberately directionless and distinct from round stops.
+                    marker = UIBezierPath(roundedRect: CGRect(x: 3, y: 3, width: 14, height: 14), cornerRadius: 3)
                 }
-                let circle = UIBezierPath(ovalIn: CGRect(x: 3.5, y: 3.5, width: 17, height: 17))
-                color.setFill(); circle.fill()
-                UIColor.white.setStroke(); circle.lineWidth = 1.5; circle.stroke()
-                UIImage(systemName: "bus.fill")?.withTintColor(.white, renderingMode: .alwaysOriginal).draw(in: CGRect(x: 7.25, y: 6.75, width: 9.5, height: 10.5))
+                color.setFill(); marker.fill()
+                UIColor.white.setStroke()
+                marker.lineWidth = 2
+                marker.lineJoinStyle = .round
+                marker.stroke()
             }
         }
 

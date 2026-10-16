@@ -80,6 +80,13 @@ final class NoPontoUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Fechar informação"].waitForExistence(timeout: 10))
         app.buttons["Fechar informação"].tap()
         capture("05-mapa-local-tres-linhas")
+        openSearch()
+        app.textFields["route-search-field"].typeText("397")
+        XCTAssertTrue(routeSuggestion("397").waitForExistence(timeout: 10))
+        capture("05b-busca-sobre-mapa-com-setas")
+        app.buttons["close-search-button"].tap()
+        verifyReturnedToMap(saved: "369")
+        XCTAssertEqual(savedRoutes.count, 3, "Fechar a busca não deve alterar as linhas salvas")
         savedRoute("369").tap()
         openContextDetails()
         XCTAssertTrue(app.buttons["choose-pattern-button"].waitForExistence(timeout: 10))
@@ -181,6 +188,10 @@ final class NoPontoUITests: XCTestCase {
         app.buttons["search-button"].tap()
         let field = app.textFields["route-search-field"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.navigationBars["Buscar linha"].exists, "A busca deve aparecer sobre o mapa, sem página modal")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "transit-map").firstMatch.exists)
+        XCTAssertLessThan(field.frame.minY, app.frame.height * 0.25, "O campo de busca deve ficar no topo")
+        XCTAssertTrue(app.buttons["close-search-button"].exists)
         field.tap()
     }
 
@@ -195,7 +206,7 @@ final class NoPontoUITests: XCTestCase {
     }
 
     private func verifyReturnedToMap(saved number: String? = nil) {
-        // Positive controls prove that the sheet is closed and the map is interactive.
+        // Positive controls prove that the search/sheet is closed and the map is interactive.
         // Querying a dismantled TextField repeatedly can stall AX snapshots during MapKit rendering.
         if let number {
             let chip = savedRoute(number)

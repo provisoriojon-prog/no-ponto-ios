@@ -24,7 +24,7 @@ struct NoPontoApp: App {
 }
 
 private enum TransitSheet: String, Identifiable {
-    case search, line, favorites, settings, nearby, stop, savedRoutes
+    case line, favorites, settings, nearby, stop, savedRoutes
     var id: String { rawValue }
 }
 
@@ -43,7 +43,7 @@ struct TransitHomeView: View {
     @State private var locationAlert: String?
     @State private var inspectedStop: TransitStop?
     @State private var showsContext = false
-    @State private var pendingRouteID: String?
+    @State private var showsSearch = false
     @State private var showsSavedRouteActions = false
     @State private var pendingSavedRouteAction: SavedRouteAction?
 
@@ -78,28 +78,37 @@ struct TransitHomeView: View {
                        walkingRoute: location.walkingRoute, focus: mapFocus,
                        followHeading: followsHeading, onStop: inspectStop, onVehicle: inspectRoute)
                 .ignoresSafeArea().accessibilityIdentifier("transit-map")
-            VStack {
-                HStack { Spacer(); settingsMenu }
-                Spacer(minLength: 0)
-                HStack(alignment: .bottom) {
-                    if !store.savedRoutes.isEmpty { savedRouteStack }
-                    Spacer(minLength: 24)
-                    mapButtons
-                }
-            }.padding(.horizontal, 16).padding(.top, 7).padding(.bottom, 34)
-            if showsContext {
+            if !showsSearch {
+                VStack {
+                    HStack { Spacer(); settingsMenu }
+                    Spacer(minLength: 0)
+                    HStack(alignment: .bottom) {
+                        if !store.savedRoutes.isEmpty { savedRouteStack }
+                        Spacer(minLength: 24)
+                        mapButtons
+                    }
+                }.padding(.horizontal, 16).padding(.top, 7).padding(.bottom, 34)
+            }
+            if showsContext && !showsSearch {
                 contextualCard.padding(.horizontal, 78)
                     .frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 164)
             }
-            if store.isDemoMode && !store.savedRoutes.isEmpty {
+            if store.isDemoMode && !store.savedRoutes.isEmpty && !showsSearch {
                 Text("DEMONSTRAÇÃO").font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary).padding(.horizontal, 8).padding(.vertical, 4)
                     .background(.regularMaterial, in: Capsule())
                     .frame(maxHeight: .infinity, alignment: .top).padding(.top, 10)
                     .accessibilityIdentifier("demo-banner")
             }
+            if showsSearch {
+                GeometryReader { geometry in
+                    RouteSearchView(maxSuggestionsHeight: min(300, max(80, geometry.size.height * 0.55)),
+                                    onSelect: selectSearchResult, onClose: { showsSearch = false })
+                        .padding(.horizontal, 12).padding(.top, 8)
+                }
+            }
         }
-        .sheet(item: $sheet, onDismiss: finishPendingRouteSelection) { destination in
+        .sheet(item: $sheet) { destination in
             NavigationStack {
                 sheetContent(destination)
                     .toolbar { ToolbarItem(placement: .topBarTrailing) { CloseSheetButton { sheet = nil } } }
@@ -155,7 +164,7 @@ struct TransitHomeView: View {
             Button {
                 store.searchText = ""
                 showsContext = false
-                sheet = .search
+                showsSearch = true
             } label: {
                 Image(systemName: "magnifyingglass").font(.system(size: 24, weight: .medium))
                     .foregroundStyle(.white).frame(width: 58, height: 58)
@@ -290,15 +299,6 @@ struct TransitHomeView: View {
 
     @ViewBuilder private func sheetContent(_ destination: TransitSheet) -> some View {
         switch destination {
-        case .search: RouteSearchView { routeID in
-            // Dismiss the keyboard/sheet before changing MapKit geometry and annotations.
-            // onDismiss commits the selected line, so the transition has one clear end state.
-            pendingRouteID = routeID
-            followsHeading = false
-            showsContext = false
-            inspectedStop = nil
-            sheet = nil
-        }
         case .line: LineDetailView { stop in mapFocus = MapFocus(point: stop.coordinate); sheet = nil; showsContext = true }
         case .favorites: FavoritesView { favorite in store.openFavorite(favorite); sheet = nil; showsContext = false }
         case .settings: TransitSettingsView()
@@ -344,9 +344,11 @@ struct TransitHomeView: View {
         showsContext = true
     }
 
-    private func finishPendingRouteSelection() {
-        guard let routeID = pendingRouteID else { return }
-        pendingRouteID = nil
+    private func selectSearchResult(_ routeID: String) {
+        showsSearch = false
+        followsHeading = false
+        showsContext = false
+        inspectedStop = nil
         store.selectRoute(routeID)
     }
 
