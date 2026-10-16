@@ -28,6 +28,10 @@ private enum TransitSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
+private enum SavedRouteAction {
+    case manage, favorites, removeAll
+}
+
 struct TransitHomeView: View {
     @EnvironmentObject private var store: TransitStore
     @EnvironmentObject private var location: LocationService
@@ -40,6 +44,8 @@ struct TransitHomeView: View {
     @State private var inspectedStop: TransitStop?
     @State private var showsContext = false
     @State private var pendingRouteID: String?
+    @State private var showsSavedRouteActions = false
+    @State private var pendingSavedRouteAction: SavedRouteAction?
 
     private var displayedPatterns: [TransitPattern] {
         var patterns: [TransitPattern] = []
@@ -162,22 +168,64 @@ struct TransitHomeView: View {
 
     private var savedRouteStack: some View {
         VStack(spacing: 7) {
-            Menu {
-                Button("Gerenciar linhas", systemImage: "list.bullet") { sheet = .savedRoutes }
-                Button("Favoritos de embarque", systemImage: "bookmark") { sheet = .favorites }
-                Button("Remover todas", systemImage: "trash", role: .destructive) { removeAllRoutes() }
-                    .accessibilityIdentifier("remove-all-routes")
-            } label: {
+            Button { showsSavedRouteActions = true } label: {
                 Image(systemName: "ellipsis").rotationEffect(.degrees(90)).font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.primary).frame(width: 38, height: 38)
                     .background(.regularMaterial, in: Circle())
                     .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
-            }.accessibilityLabel("Opções das linhas salvas").accessibilityIdentifier("saved-routes-menu")
+            }.buttonStyle(.plain)
+                .accessibilityLabel("Opções das linhas salvas").accessibilityIdentifier("saved-routes-menu")
+                .accessibilityValue(showsSavedRouteActions ? "aberto" : "fechado")
+                .popover(isPresented: $showsSavedRouteActions, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+                    savedRouteActions
+                        .presentationCompactAdaptation(.popover)
+                        .onDisappear(perform: performPendingSavedRouteAction)
+                }
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 7) {
                     ForEach(store.savedRoutes) { route in savedRouteButton(route) }
                 }.padding(3)
             }.frame(width: 54, height: min(CGFloat(store.savedRoutes.count) * 53 + 6, 270))
+        }
+    }
+
+    private var savedRouteActions: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Linhas salvas").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                .padding(.horizontal, 14).padding(.top, 9).padding(.bottom, 5)
+                .accessibilityIdentifier("saved-route-actions-title")
+            savedRouteActionButton("Gerenciar linhas", symbol: "list.bullet", action: .manage,
+                                   identifier: "manage-saved-routes")
+            savedRouteActionButton("Favoritos de embarque", symbol: "bookmark", action: .favorites,
+                                   identifier: "saved-routes-favorites")
+            Divider().padding(.horizontal, 12)
+            savedRouteActionButton("Remover todas", symbol: "trash", action: .removeAll,
+                                   identifier: "remove-all-routes", destructive: true)
+        }.padding(6).frame(width: 254)
+    }
+
+    private func savedRouteActionButton(_ title: String, symbol: String, action: SavedRouteAction,
+                                       identifier: String, destructive: Bool = false) -> some View {
+        Button(role: destructive ? .destructive : nil) {
+            pendingSavedRouteAction = action
+            showsSavedRouteActions = false
+        } label: {
+            Label(title, systemImage: symbol).font(.subheadline)
+                .foregroundStyle(destructive ? Color.red : Color.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityIdentifier(identifier)
+    }
+
+    private func performPendingSavedRouteAction() {
+        guard let action = pendingSavedRouteAction else { return }
+        pendingSavedRouteAction = nil
+        // Keep the popover anchor alive until dismissal and avoid presenting two sheets at once.
+        switch action {
+        case .manage: sheet = .savedRoutes
+        case .favorites: sheet = .favorites
+        case .removeAll: removeAllRoutes()
         }
     }
 

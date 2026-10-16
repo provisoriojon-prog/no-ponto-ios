@@ -107,18 +107,36 @@ final class NoPontoUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[favoriteName].waitForExistence(timeout: 10), "Favoritos continuam acessíveis pelo menu secundário")
         app.buttons["Fechar"].firstMatch.tap()
         verifyReturnedToMap(saved: "369")
-        // SwiftUI Menu may be exposed as a PopUpButton instead of a Button.
-        // Match stable identifiers across accessibility roles, then wait for the open menu.
-        let savedMenu = app.descendants(matching: .any).matching(identifier: "saved-routes-menu").firstMatch
+        let savedMenu = app.buttons["saved-routes-menu"]
         waitUntilHittable(savedMenu, "O menu de linhas salvas deve estar tocável após fechar favoritos")
         savedMenu.tap()
-        let removeAll = app.descendants(matching: .any).matching(identifier: "remove-all-routes").firstMatch
-        waitUntilHittable(removeAll, "Remover todas deve aparecer no menu aberto")
+        let actionsTitle = app.staticTexts["saved-route-actions-title"]
+        XCTAssertTrue(actionsTitle.waitForExistence(timeout: 15), "O toque deve apresentar as ações das linhas salvas")
+        waitUntilHittable(app.buttons["manage-saved-routes"], "Gerenciar linhas deve estar disponível no popover")
+        waitUntilHittable(app.buttons["saved-routes-favorites"], "Favoritos deve estar disponível no popover")
+        let removeAll = app.buttons["remove-all-routes"]
+        waitUntilHittable(removeAll, "Remover todas deve aparecer no popover aberto")
+        capture("07-acoes-das-linhas-abertas")
+        app.buttons["manage-saved-routes"].tap()
+        XCTAssertTrue(app.navigationBars["Linhas salvas"].waitForExistence(timeout: 15))
+        XCTAssertFalse(actionsTitle.exists)
+        app.buttons["Fechar"].firstMatch.tap()
+        verifyReturnedToMap(saved: "369")
+        savedMenu.tap()
+        waitUntilHittable(app.buttons["saved-routes-favorites"], "Favoritos deve abrir pelo menu das linhas")
+        app.buttons["saved-routes-favorites"].tap()
+        XCTAssertTrue(app.staticTexts[favoriteName].waitForExistence(timeout: 15))
+        XCTAssertFalse(actionsTitle.exists)
+        app.buttons["Fechar"].firstMatch.tap()
+        verifyReturnedToMap(saved: "369")
+        savedMenu.tap()
+        waitUntilHittable(removeAll, "Remover todas deve estar tocável ao reabrir o menu")
         removeAll.tap()
         verifyReturnedToMap()
+        XCTAssertFalse(actionsTitle.exists, "As ações devem fechar após remover as linhas")
         XCTAssertEqual(savedRoutes.count, 0)
         XCTAssertFalse(app.buttons["line-detail-button"].exists)
-        capture("07-mapa-limpo-apos-remover")
+        capture("08-mapa-limpo-apos-remover")
         app.terminate()
         app.launchArguments = ["--ui-testing"]
         app.launch()
