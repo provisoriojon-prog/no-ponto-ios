@@ -142,6 +142,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          APP_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' build/package/Payload/NoPonto.app/Info.plist)
           gh release create "noponto-${GITHUB_RUN_NUMBER}" dist/* \
-            --target "$SOURCE_COMMIT" --title "No Ponto 1.1 - build ${GITHUB_RUN_NUMBER}" \
+            --target "$SOURCE_COMMIT" --title "No Ponto ${APP_VERSION} - build ${GITHUB_RUN_NUMBER}" \
             --notes-file scripts/release-notes.txt
